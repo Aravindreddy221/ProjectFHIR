@@ -1,0 +1,1634 @@
+<!--
+  FHIR R4 Validator powered by Dharma
+  Copyright 2026 Dharmaraj Nagarajan. All rights reserved.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="author" content="Dharmaraj Nagarajan" />
+<meta name="copyright" content="Copyright 2026 Dharmaraj Nagarajan. All rights reserved." />
+<title>FHIR R4 Validator powered by Dharma</title>
+<meta name="description" content="Client-side FHIR R4 resource validator with live line-level fault highlighting, an editable inspector, and exportable reports." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css" />
+
+<style>
+/* ============================================================
+   TOKENS
+   ============================================================ */
+:root{
+  --bg-void: #0A0F1A;
+  --bg-panel: #0F1729;
+  --bg-panel-raised: #152039;
+  --bg-inset: #0A1120;
+  --line-grid: #1F2C48;
+  --line-grid-soft: #182338;
+  --text-primary: #E7ECF5;
+  --text-secondary: #AEBBD4;
+  --text-muted: #6C7B9C;
+
+  --pulse-cyan: #33E6C8;
+  --pulse-cyan-dim: rgba(51,230,200,0.14);
+  --error-red: #FF6B6B;
+  --error-red-dim: rgba(255,107,107,0.12);
+  --warn-amber: #FFB454;
+  --warn-amber-dim: rgba(255,180,84,0.12);
+  --info-blue: #5CA8FF;
+  --info-blue-dim: rgba(92,168,255,0.12);
+  --practice-violet: #B98CFF;
+  --practice-violet-dim: rgba(185,140,255,0.12);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  --shadow-panel: 0 20px 60px -20px rgba(0,0,0,0.6);
+}
+
+*{ box-sizing: border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  background:
+    radial-gradient(1200px 500px at 15% -10%, rgba(51,230,200,0.06), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(92,168,255,0.05), transparent 55%),
+    var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+::selection{ background: var(--pulse-cyan-dim); color: var(--pulse-cyan); }
+
+/* subtle ECG graph-paper texture behind everything */
+.grid-veil{
+  position: fixed; inset:0; pointer-events:none; z-index:0;
+  background-image:
+    linear-gradient(var(--line-grid-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-grid-soft) 1px, transparent 1px);
+  background-size: 34px 34px;
+  opacity: 0.35;
+  mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 30%, transparent 85%);
+}
+
+button{ font-family: inherit; }
+select, input{ font-family: inherit; }
+
+a{ color: var(--pulse-cyan); }
+
+/* ============================================================
+   SCROLLBARS
+   ============================================================ */
+*::-webkit-scrollbar{ width: 10px; height: 10px; }
+*::-webkit-scrollbar-track{ background: transparent; }
+*::-webkit-scrollbar-thumb{ background: var(--line-grid); border-radius: 8px; }
+*::-webkit-scrollbar-thumb:hover{ background: #2b3c62; }
+
+/* ============================================================
+   LAYOUT SHELL
+   ============================================================ */
+.shell{
+  position: relative; z-index: 1;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 0 28px 40px;
+}
+
+/* ---------------- Header / signature pulse ---------------- */
+header.top{
+  padding: 26px 0 20px;
+  display:flex; align-items:center; justify-content:space-between; gap: 24px;
+  border-bottom: 1px solid var(--line-grid);
+}
+.brand{
+  display:flex; align-items:center; gap: 12px;
+}
+.brand-mark{
+  width: 38px; height: 38px; border-radius: 10px;
+  background: linear-gradient(160deg, var(--pulse-cyan), #1CA98F);
+  display:flex; align-items:center; justify-content:center;
+  color: #05130F; font-family: var(--font-display); font-weight:700; font-size: 17px;
+  box-shadow: 0 6px 20px -6px rgba(51,230,200,0.55);
+  flex-shrink:0;
+}
+.brand-text h1{
+  font-family: var(--font-display); font-size: 19px; margin:0; letter-spacing: 0.01em;
+  font-weight: 700;
+}
+.brand-text p{
+  margin: 1px 0 0; font-size: 12px; color: var(--text-muted); letter-spacing: 0.03em;
+}
+
+.pulse-wrap{
+  flex: 1;
+  min-width: 160px;
+  max-width: 440px;
+  height: 46px;
+  position: relative;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-grid);
+  background: var(--bg-inset);
+  overflow: hidden;
+}
+.pulse-wrap svg{ width:100%; height:100%; display:block; }
+.pulse-line{
+  fill:none; stroke: var(--pulse-cyan); stroke-width: 1.6;
+  filter: drop-shadow(0 0 6px rgba(51,230,200,0.65));
+  transition: stroke 0.4s ease;
+}
+.pulse-wrap.has-errors .pulse-line{ stroke: var(--error-red); filter: drop-shadow(0 0 6px rgba(255,107,107,0.6)); }
+.pulse-wrap.has-warnings .pulse-line{ stroke: var(--warn-amber); filter: drop-shadow(0 0 6px rgba(255,180,84,0.55)); }
+.pulse-label{
+  position:absolute; left:10px; top:6px; font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.08em; color: var(--text-muted); text-transform: uppercase;
+}
+
+.header-stats{
+  display:flex; gap: 10px; flex-shrink:0;
+}
+.stat-chip{
+  padding: 8px 14px; border-radius: var(--radius-md);
+  border: 1px solid var(--line-grid); background: var(--bg-panel-raised);
+  text-align:center; min-width: 64px;
+}
+.stat-chip .n{ font-family: var(--font-mono); font-size: 18px; font-weight: 600; line-height:1; display:block; }
+.stat-chip .l{ font-size: 9px; text-transform:uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-top:4px; display:block; }
+.stat-chip.err .n{ color: var(--error-red); }
+.stat-chip.warn .n{ color: var(--warn-amber); }
+.stat-chip.ok .n{ color: var(--pulse-cyan); }
+
+/* ---------------- Toolbar ---------------- */
+.toolbar{
+  display:flex; align-items:center; gap: 10px; flex-wrap: wrap;
+  padding: 16px 0;
+}
+.btn{
+  display:inline-flex; align-items:center; gap: 7px;
+  padding: 9px 15px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line-grid); background: var(--bg-panel-raised);
+  color: var(--text-primary); font-size: 13px; font-weight: 500;
+  cursor:pointer; transition: all 0.15s ease; white-space:nowrap;
+}
+.btn:hover{ border-color: #33456e; background:#182645; }
+.btn:active{ transform: translateY(1px); }
+.btn.primary{
+  background: linear-gradient(160deg, var(--pulse-cyan), #1CA98F);
+  color: #05130F; border-color: transparent; font-weight: 600;
+}
+.btn.primary:hover{ filter: brightness(1.07); }
+.btn svg{ width:14px; height:14px; flex-shrink:0; }
+.btn.ghost{ background: transparent; }
+.btn:disabled{ opacity:0.45; cursor:not-allowed; }
+
+.toggle{
+  display:flex; align-items:center; gap:8px; font-size: 13px; color: var(--text-secondary);
+  padding: 9px 12px; border-radius: var(--radius-sm); border:1px solid var(--line-grid);
+  background: var(--bg-panel-raised); cursor:pointer; user-select:none;
+}
+.toggle input{ display:none; }
+.switch{
+  width: 30px; height: 17px; border-radius: 20px; background: #263455; position:relative; transition: background 0.2s;
+}
+.switch::after{
+  content:''; position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:50%;
+  background: var(--text-muted); transition: all 0.2s ease;
+}
+.toggle input:checked + .switch{ background: var(--pulse-cyan-dim); border: 1px solid var(--pulse-cyan); }
+.toggle input:checked + .switch::after{ left: 15px; background: var(--pulse-cyan); }
+
+.toolbar-spacer{ flex:1; }
+
+.dropdown{ position:relative; }
+.dropdown-menu{
+  position:absolute; top: calc(100% + 6px); right:0; min-width: 210px;
+  background: var(--bg-panel-raised); border:1px solid var(--line-grid); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel); padding: 6px; display:none; z-index: 50;
+}
+.dropdown.open .dropdown-menu{ display:block; }
+.dropdown-item{
+  display:flex; align-items:center; gap:9px; padding: 9px 10px; border-radius: 7px; font-size: 13px;
+  cursor:pointer; color: var(--text-secondary);
+}
+.dropdown-item:hover{ background: var(--bg-inset); color: var(--text-primary); }
+.dropdown-item svg{ width:14px; height:14px; opacity:0.8; }
+.dropdown-item small{ display:block; color: var(--text-muted); font-size:11px; margin-top:1px; }
+
+/* ---------------- Workspace grid ---------------- */
+.workspace{
+  display:grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 980px){
+  .workspace{ grid-template-columns: 1fr; }
+}
+
+.panel{
+  background: var(--bg-panel);
+  border: 1px solid var(--line-grid);
+  border-radius: var(--radius-lg);
+  overflow:hidden;
+  box-shadow: var(--shadow-panel);
+}
+.panel-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-grid);
+  background: var(--bg-panel-raised);
+}
+.panel-head h2{
+  font-family: var(--font-display); font-size: 13px; margin:0; letter-spacing:0.04em; text-transform:uppercase;
+  color: var(--text-secondary); font-weight:600; display:flex; align-items:center; gap:8px;
+}
+.panel-head h2 .dot{ width:7px; height:7px; border-radius:50%; background: var(--pulse-cyan); box-shadow:0 0 8px var(--pulse-cyan); }
+.panel-head .meta{ font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+
+/* Editor */
+.editor-tabs{ display:flex; gap:4px; }
+.editor-tab{
+  padding: 5px 10px; font-size: 11.5px; border-radius: 6px; color: var(--text-muted); cursor:pointer;
+  border: 1px solid transparent; letter-spacing:0.02em;
+}
+.editor-tab.active{ background: var(--bg-inset); color: var(--pulse-cyan); border-color: var(--line-grid); }
+
+#editor-host{ height: 520px; position:relative; }
+.CodeMirror{ height: 100% !important; font-family: var(--font-mono) !important; font-size: 13px !important; line-height: 1.55 !important; background: var(--bg-inset) !important; padding-top: 6px; }
+.CodeMirror-gutters{ background: var(--bg-inset) !important; border-right: 1px solid var(--line-grid) !important; }
+.CodeMirror-linenumber{ color: #3C4C74 !important; }
+
+.line-err{ background: rgba(255,107,107,0.10); }
+.line-warn{ background: rgba(255,180,84,0.09); }
+.line-info{ background: rgba(92,168,255,0.08); }
+.line-practice{ background: rgba(185,140,255,0.08); }
+
+.gutter-marker{ width:9px; height:9px; border-radius:50%; margin: 5px auto 0; }
+.gutter-marker.error{ background: var(--error-red); box-shadow:0 0 6px rgba(255,107,107,0.7); }
+.gutter-marker.warning{ background: var(--warn-amber); box-shadow:0 0 6px rgba(255,180,84,0.6); }
+.gutter-marker.information{ background: var(--info-blue); }
+.gutter-marker.best-practice{ background: var(--practice-violet); }
+
+.mark-flash{ outline: 2px solid var(--pulse-cyan); border-radius: 3px; }
+
+.drop-veil{
+  position:absolute; inset:0; z-index: 30; display:none; align-items:center; justify-content:center;
+  background: rgba(10,15,26,0.88); border: 2px dashed var(--pulse-cyan); border-radius: var(--radius-lg);
+  font-family: var(--font-mono); color: var(--pulse-cyan); font-size: 13px; letter-spacing: 0.04em;
+}
+.drop-veil.active{ display:flex; }
+
+/* Right column stacking */
+.right-col{ display:flex; flex-direction:column; gap: 18px; }
+
+/* Problems list */
+.problems-body{ max-height: 300px; overflow-y:auto; }
+.severity-group{ border-bottom: 1px solid var(--line-grid-soft); }
+.severity-group:last-child{ border-bottom:none; }
+.severity-group summary{
+  list-style:none; cursor:pointer; padding: 10px 16px; display:flex; align-items:center; gap:9px;
+  font-size: 12.5px; font-weight:600; color: var(--text-secondary); user-select:none;
+}
+.severity-group summary::-webkit-details-marker{ display:none; }
+.severity-group summary .caret{ margin-left:auto; color: var(--text-muted); transition: transform 0.15s; font-size:11px; }
+.severity-group[open] summary .caret{ transform: rotate(90deg); }
+.sev-dot{ width:8px; height:8px; border-radius:50%; }
+.sev-dot.error{ background: var(--error-red); }
+.sev-dot.warning{ background: var(--warn-amber); }
+.sev-dot.information{ background: var(--info-blue); }
+.sev-dot.best-practice{ background: var(--practice-violet); }
+.sev-count{ font-family: var(--font-mono); color: var(--text-muted); font-weight:400; }
+
+.issue-row{
+  padding: 9px 16px 9px 33px; cursor:pointer; border-top: 1px solid var(--line-grid-soft);
+  transition: background 0.12s;
+}
+.issue-row:hover{ background: var(--bg-panel-raised); }
+.issue-row.active{ background: var(--pulse-cyan-dim); }
+.issue-row .path{
+  font-family: var(--font-mono); font-size: 11px; color: var(--pulse-cyan); display:block; margin-bottom: 2px;
+  word-break: break-all;
+}
+.issue-row .msg{ font-size: 12.5px; color: var(--text-primary); line-height:1.4; }
+.issue-row .line-tag{ font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); margin-left:6px; }
+
+.empty-state{
+  padding: 34px 20px; text-align:center; color: var(--text-muted); font-size: 13px; line-height:1.6;
+}
+.empty-state svg{ width: 34px; height:34px; color: var(--pulse-cyan); margin-bottom: 10px; opacity:0.8; }
+
+/* Inspector (separate window pane) */
+.inspector-body{ padding: 14px 16px 18px; min-height: 140px; }
+.inspector-empty{ color: var(--text-muted); font-size: 12.5px; line-height:1.6; padding: 10px 0; }
+.insp-badge{
+  display:inline-flex; align-items:center; gap:6px; padding: 3px 9px; border-radius: 20px;
+  font-size: 10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px;
+}
+.insp-badge.error{ background: var(--error-red-dim); color: var(--error-red); }
+.insp-badge.warning{ background: var(--warn-amber-dim); color: var(--warn-amber); }
+.insp-badge.information{ background: var(--info-blue-dim); color: var(--info-blue); }
+.insp-badge.best-practice{ background: var(--practice-violet-dim); color: var(--practice-violet); }
+
+.insp-path{ font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; word-break: break-all;}
+.insp-msg{ font-size: 13.5px; line-height:1.55; margin-bottom: 14px; }
+.insp-fix{
+  background: var(--bg-inset); border:1px solid var(--line-grid); border-radius: var(--radius-md);
+  padding: 11px 13px; font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px;
+}
+.insp-fix b{ color: var(--pulse-cyan); font-weight:600; }
+.insp-snippet{
+  background: var(--bg-inset); border:1px solid var(--line-grid); border-radius: var(--radius-md);
+  font-family: var(--font-mono); font-size: 12px; overflow-x:auto;
+}
+.insp-snippet .sl{ display:flex; }
+.insp-snippet .ln{ width: 38px; flex-shrink:0; text-align:right; padding: 2px 10px 2px 0; color: #3C4C74; user-select:none; }
+.insp-snippet .code{ white-space:pre; padding: 2px 10px 2px 0; }
+.insp-snippet .sl.hl{ background: rgba(255,107,107,0.12); border-left: 2px solid var(--error-red); }
+.insp-snippet .sl.hl .ln{ color: var(--error-red); }
+
+/* Summary dashboard */
+.summary-row{ display:grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-top: 18px; }
+@media (max-width: 720px){ .summary-row{ grid-template-columns: repeat(2,1fr);} }
+.summary-card{
+  background: var(--bg-panel); border:1px solid var(--line-grid); border-radius: var(--radius-md);
+  padding: 15px 16px;
+}
+.summary-card .n{ font-family: var(--font-mono); font-size: 24px; font-weight:600; }
+.summary-card .l{ font-size:11px; color: var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-top: 4px; }
+.summary-card.res .n{ font-family: var(--font-display); font-size: 18px; }
+
+footer.foot{
+  margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line-grid);
+  font-size: 11.5px; color: var(--text-muted);
+}
+footer.foot a{ color: var(--text-secondary); text-decoration:none; }
+footer.foot a:hover{ color: var(--pulse-cyan); }
+.foot-row{ display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.foot-copyright{
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-grid-soft);
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.02em;
+  display:flex; align-items:center; gap:8px;
+}
+.foot-copyright .mark{ color: var(--pulse-cyan); }
+
+/* Toast */
+#toast-host{ position: fixed; bottom: 22px; right: 22px; display:flex; flex-direction:column; gap:8px; z-index: 200; }
+.toast{
+  padding: 11px 16px; border-radius: var(--radius-md); background: var(--bg-panel-raised);
+  border:1px solid var(--line-grid); font-size: 12.5px; box-shadow: var(--shadow-panel);
+  display:flex; align-items:center; gap:9px; animation: toast-in 0.2s ease;
+}
+.toast.success{ border-color: rgba(51,230,200,0.4); }
+.toast .dot{ width:7px; height:7px; border-radius:50%; background: var(--pulse-cyan); flex-shrink:0; }
+@keyframes toast-in{ from{ opacity:0; transform: translateY(8px);} to{opacity:1; transform:none;} }
+
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+.visually-hidden{
+  position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap;
+}
+</style>
+</head>
+<body>
+
+<div class="grid-veil"></div>
+
+<div class="shell">
+
+  <header class="top">
+    <div class="brand">
+      <div class="brand-mark">+</div>
+      <div class="brand-text">
+        <h1>FHIR R4 Validator</h1>
+        <p>powered by Dharma</p>
+      </div>
+    </div>
+
+    <div class="pulse-wrap" id="pulseWrap">
+      <span class="pulse-label">Signal</span>
+      <svg viewBox="0 0 440 46" preserveAspectRatio="none">
+        <path class="pulse-line" id="pulsePath" d="M0,23 L440,23"></path>
+      </svg>
+    </div>
+
+    <div class="header-stats" aria-live="polite">
+      <div class="stat-chip err"><span class="n" id="chipErr">0</span><span class="l">Errors</span></div>
+      <div class="stat-chip warn"><span class="n" id="chipWarn">0</span><span class="l">Warnings</span></div>
+      <div class="stat-chip ok"><span class="n" id="chipMs">&mdash;</span><span class="l">ms</span></div>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="dropdown" id="sampleDropdown">
+      <button class="btn" id="sampleBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        Load sample
+      </button>
+      <div class="dropdown-menu" id="sampleMenu"></div>
+    </div>
+
+    <button class="btn" id="uploadBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+      Upload file
+    </button>
+    <input type="file" id="fileInput" accept=".json,.xml" class="visually-hidden" />
+
+    <button class="btn ghost" id="clearBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+      Clear
+    </button>
+
+    <div class="toolbar-spacer"></div>
+
+    <label class="toggle">
+      <input type="checkbox" id="autoValidate" checked />
+      <span class="switch"></span>
+      Auto-check
+    </label>
+
+    <button class="btn primary" id="validateBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+      Validate now
+    </button>
+
+    <div class="dropdown" id="exportDropdown">
+      <button class="btn" id="exportBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        Export report
+      </button>
+      <div class="dropdown-menu" id="exportMenu">
+        <div class="dropdown-item" data-export="json">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <span>JSON report<small>Full issue list, machine-readable</small></span>
+        </div>
+        <div class="dropdown-item" data-export="csv">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+          <span>CSV report<small>Open in Excel / Sheets</small></span>
+        </div>
+        <div class="dropdown-item" data-export="html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <span>HTML report<small>Shareable, styled summary</small></span>
+        </div>
+        <div class="dropdown-item" data-export="print">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+          <span>Print / Save as PDF<small>Opens print dialog</small></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <!-- EDITOR PANEL -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2><span class="dot"></span> Resource source</h2>
+        <div class="editor-tabs">
+          <div class="editor-tab active" data-mode="json">JSON</div>
+          <div class="editor-tab" data-mode="xml">XML</div>
+        </div>
+        <span class="meta" id="editorMeta">0 lines</span>
+      </div>
+      <div id="editor-host">
+        <div class="drop-veil" id="dropVeil">Drop a .json or .xml FHIR resource</div>
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+      <section class="panel">
+        <div class="panel-head">
+          <h2><span class="dot"></span> Problems</h2>
+          <span class="meta" id="problemsMeta">not yet checked</span>
+        </div>
+        <div class="problems-body" id="problemsBody">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+            <div>Paste or load a resource, then run<br/>a validation pass to see results here.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2><span class="dot"></span> Inspector</h2>
+          <span class="meta">select an issue</span>
+        </div>
+        <div class="inspector-body" id="inspectorBody">
+          <div class="inspector-empty">Click any problem on the left to see exactly where it lives in the source, why it's flagged, and how to fix it &mdash; without leaving this window.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="summary-row">
+    <div class="summary-card res"><span class="n" id="sumResource">&mdash;</span><span class="l">Detected resource</span></div>
+    <div class="summary-card"><span class="n" id="sumTotal">0</span><span class="l">Total issues</span></div>
+    <div class="summary-card"><span class="n" id="sumBest">0</span><span class="l">Best-practice notes</span></div>
+    <div class="summary-card"><span class="n" id="sumSize">0 B</span><span class="l">Source size</span></div>
+  </div>
+
+  <footer class="foot">
+    <div class="foot-row">
+      <span>FHIR R4 Validator powered by Dharma validates structure, cardinality, primitive formats, and reference shape entirely in your browser &mdash; no resource data leaves this tab.</span>
+      <span>Rule set: FHIR R4 base spec (informational, not a substitute for the HL7 reference validator or IG-specific profiles)</span>
+    </div>
+    <div class="foot-copyright"><span class="mark">&copy;</span> Copyright 2026 Dharmaraj Nagarajan. All rights reserved.</div>
+  </footer>
+
+</div>
+
+<div id="toast-host"></div>
+
+<!-- ============================================================
+     VALIDATION ENGINE — runs inside a Web Worker (see boot script)
+     Pure, self-contained: no DOM access, no closures over page state.
+     ============================================================ -->
+<script id="engine-src" type="text/plain">
+"use strict";
+
+/* ---------- Known FHIR R4 resource types (for typo suggestions) ---------- */
+var RESOURCE_TYPES = ["Account","ActivityDefinition","AdverseEvent","AllergyIntolerance","Appointment","AppointmentResponse","AuditEvent","Basic","Binary","BiologicallyDerivedProduct","BodyStructure","Bundle","CapabilityStatement","CarePlan","CareTeam","CatalogEntry","ChargeItem","ChargeItemDefinition","Claim","ClaimResponse","ClinicalImpression","CodeSystem","Communication","CommunicationRequest","CompartmentDefinition","Composition","ConceptMap","Condition","Consent","Contract","Coverage","CoverageEligibilityRequest","CoverageEligibilityResponse","DetectedIssue","Device","DeviceDefinition","DeviceMetric","DeviceRequest","DeviceUseStatement","DiagnosticReport","DocumentManifest","DocumentReference","EffectEvidenceSynthesis","Encounter","Endpoint","EnrollmentRequest","EnrollmentResponse","EpisodeOfCare","EventDefinition","Evidence","EvidenceVariable","ExampleScenario","ExplanationOfBenefit","FamilyMemberHistory","Flag","Goal","GraphDefinition","Group","GuidanceResponse","HealthcareService","ImagingStudy","Immunization","ImmunizationEvaluation","ImmunizationRecommendation","ImplementationGuide","InsurancePlan","Invoice","Library","Linkage","List","Location","Measure","MeasureReport","Media","Medication","MedicationAdministration","MedicationDispense","MedicationKnowledge","MedicationRequest","MedicationStatement","MedicinalProduct","MessageDefinition","MessageHeader","MolecularSequence","NamingSystem","NutritionOrder","Observation","ObservationDefinition","OperationDefinition","OperationOutcome","Organization","OrganizationAffiliation","Patient","PaymentNotice","PaymentReconciliation","Person","PlanDefinition","Practitioner","PractitionerRole","Procedure","Provenance","Questionnaire","QuestionnaireResponse","RelatedPerson","RequestGroup","ResearchDefinition","ResearchElementDefinition","ResearchStudy","ResearchSubject","RiskAssessment","Schedule","SearchParameter","ServiceRequest","Slot","Specimen","SpecimenDefinition","StructureDefinition","StructureMap","Subscription","Substance","SupplyDelivery","SupplyRequest","Task","TerminologyCapabilities","TestReport","TestScript","ValueSet","VerificationResult","VisionPrescription"];
+
+/* ---------- Primitive datatype regexes (FHIR R4) ---------- */
+var PRIMITIVE_REGEX = {
+  code: /^[^\s]+( [^\s]+)*$/,
+  id: /^[A-Za-z0-9\-.]{1,64}$/,
+  date: /^\d{4}(-\d{2}(-\d{2})?)?$/,
+  dateTime: /^\d{4}(-\d{2}(-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2}))?)?)?$/,
+  instant: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/,
+  uri: /^\S*$/,
+  positiveInt: /^[1-9][0-9]*$/,
+  unsignedInt: /^[0-9]+$/,
+  decimal: /^-?\d+(\.\d+)?$/,
+  boolean: null /* checked via typeof */
+};
+
+var GENDER_VALUES = ["male","female","other","unknown"];
+var ADMIN_GENDER_MSG = "Expected one of: male, female, other, unknown.";
+
+/* ---------- Per-resource rule tables (base FHIR R4 cardinalities) ---------- */
+/* required: element names that MUST be present (1..1 / 1..*)               */
+/* arrays:   element names that must be a JSON array when present            */
+/* bestPractice: elements HL7 recommends but does not strictly require       */
+var SCHEMAS = {
+  Patient: {
+    arrays: ["identifier","name","telecom","address","contact","communication","generalPractitioner","link","photo"],
+    scalars: ["active","gender","birthDate","deceasedBoolean","deceasedDateTime","maritalStatus","multipleBirthBoolean","multipleBirthInteger","managingOrganization"],
+    required: [],
+    bestPractice: ["identifier","name"]
+  },
+  Practitioner: {
+    arrays: ["identifier","name","telecom","address","qualification","communication","photo"],
+    scalars: ["active","gender","birthDate"],
+    required: [],
+    bestPractice: ["identifier"]
+  },
+  PractitionerRole: {
+    arrays: ["identifier","code","specialty","location","healthcareService","telecom","availableTime","notAvailable","endpoint"],
+    scalars: ["active","period","practitioner","organization"],
+    required: [],
+    bestPractice: []
+  },
+  Organization: {
+    arrays: ["identifier","type","telecom","address","contact","endpoint"],
+    scalars: ["active","name","partOf"],
+    required: [],
+    bestPractice: ["name"]
+  },
+  Location: {
+    arrays: ["identifier","telecom","address","type","hoursOfOperation","endpoint"],
+    scalars: ["status","name","description","mode","physicalType","position","managingOrganization","partOf","operationalStatus"],
+    required: [],
+    bestPractice: ["name"]
+  },
+  Encounter: {
+    arrays: ["identifier","statusHistory","classHistory","type","episodeOfCare","participant","reasonCode","reasonReference","diagnosis","account","location"],
+    scalars: ["status","class","subject","period","length","serviceProvider","partOf","priority","serviceType","hospitalization"],
+    required: ["status","class"],
+    bestPractice: ["subject"]
+  },
+  Observation: {
+    arrays: ["identifier","basedOn","partOf","category","performer","interpretation","note","referenceRange","hasMember","derivedFrom","component"],
+    scalars: ["status","code","subject","encounter","effectiveDateTime","effectivePeriod","effectiveTiming","effectiveInstant","issued","valueQuantity","valueCodeableConcept","valueString","valueBoolean","valueInteger","valueRange","valueRatio","valueSampledData","valueTime","valueDateTime","valuePeriod","dataAbsentReason","bodySite","method","specimen","device"],
+    required: ["status","code"],
+    bestPractice: ["subject"]
+  },
+  Condition: {
+    arrays: ["identifier","category","bodySite","stage","evidence","note"],
+    scalars: ["clinicalStatus","verificationStatus","severity","code","subject","encounter","onsetDateTime","onsetAge","onsetPeriod","onsetRange","onsetString","abatementDateTime","abatementAge","abatementPeriod","abatementRange","abatementString","abatementBoolean","recordedDate","recorder","asserter"],
+    required: ["subject"],
+    bestPractice: ["clinicalStatus","code"]
+  },
+  AllergyIntolerance: {
+    arrays: ["identifier","category","note","reaction"],
+    scalars: ["clinicalStatus","verificationStatus","type","criticality","code","patient","encounter","onsetDateTime","onsetAge","onsetPeriod","onsetRange","onsetString","recordedDate","recorder","asserter","lastOccurrence"],
+    required: ["patient"],
+    bestPractice: ["code","clinicalStatus"]
+  },
+  MedicationRequest: {
+    arrays: ["identifier","basedOn","category","reasonCode","reasonReference","note","dosageInstruction","insurance","detectedIssue","eventHistory"],
+    scalars: ["status","statusReason","intent","priority","doNotPerform","medicationCodeableConcept","medicationReference","subject","encounter","authoredOn","requester","performer","performerType","recorder","courseOfTherapyType","priorPrescription","substitution","dispenseRequest"],
+    required: ["status","intent","subject"],
+    bestPractice: ["medicationCodeableConcept","medicationReference"]
+  },
+  MedicationStatement: {
+    arrays: ["identifier","basedOn","partOf","category","reasonCode","reasonReference","note","dosage"],
+    scalars: ["status","statusReason","medicationCodeableConcept","medicationReference","subject","context","effectiveDateTime","effectivePeriod","dateAsserted","informationSource","derivedFrom"],
+    required: ["status","subject"],
+    bestPractice: ["medicationCodeableConcept","medicationReference"]
+  },
+  Procedure: {
+    arrays: ["identifier","basedOn","partOf","category","reasonCode","reasonReference","bodySite","performer","note","focalDevice","usedReference","usedCode"],
+    scalars: ["status","statusReason","code","subject","encounter","performedDateTime","performedPeriod","performedString","performedAge","performedRange","recorder","asserter","location","outcome","complicationDetail","followUp"],
+    required: ["status","subject"],
+    bestPractice: ["code"]
+  },
+  Immunization: {
+    arrays: ["identifier","reasonCode","reasonReference","note","protocolApplied","education","programEligibility"],
+    scalars: ["status","statusReason","vaccineCode","patient","encounter","occurrenceDateTime","occurrenceString","recorded","primarySource","reportOrigin","location","manufacturer","lotNumber","expirationDate","site","route","doseQuantity","isSubpotent"],
+    required: ["status","vaccineCode","patient"],
+    bestPractice: ["occurrenceDateTime"]
+  },
+  Appointment: {
+    arrays: ["identifier","serviceCategory","serviceType","specialty","reasonCode","reasonReference","supportingInformation","participant","requestedPeriod"],
+    scalars: ["status","cancelationReason","appointmentType","priority","description","start","end","minutesDuration","slot","created","comment","patientInstruction","basedOn"],
+    required: ["status","participant"],
+    bestPractice: []
+  },
+  DiagnosticReport: {
+    arrays: ["identifier","basedOn","category","performer","resultsInterpreter","specimen","result","imagingStudy","media","presentedForm"],
+    scalars: ["status","code","subject","encounter","effectiveDateTime","effectivePeriod","issued","conclusion","conclusionCode"],
+    required: ["status","code"],
+    bestPractice: ["subject"]
+  },
+  CarePlan: {
+    arrays: ["identifier","basedOn","replaces","partOf","category","addresses","supportingInfo","goal","activity","note"],
+    scalars: ["status","intent","title","description","subject","encounter","period","created","author","contributor"],
+    required: ["status","intent","subject"],
+    bestPractice: []
+  },
+  Coverage: {
+    arrays: ["identifier","class","costToBeneficiary"],
+    scalars: ["status","type","policyHolder","subscriber","subscriberId","beneficiary","dependent","relationship","period","payor","order","network"],
+    required: ["status","beneficiary","payor"],
+    bestPractice: []
+  },
+  Bundle: {
+    arrays: ["link","entry","signature"],
+    scalars: ["type","timestamp","total","identifier"],
+    required: ["type"],
+    bestPractice: []
+  }
+};
+
+var KNOWN_ROOT_FIELDS = ["resourceType","id","meta","implicitRules","language","text","contained","extension","modifierExtension"];
+
+/* ---------- Levenshtein distance (typo suggestions) ---------- */
+function levenshtein(a, b) {
+  var m = a.length, n = b.length;
+  var dp = [];
+  for (var i = 0; i <= m; i++) { dp.push([i]); }
+  for (var j = 0; j <= n; j++) { dp[0][j] = j; }
+  for (i = 1; i <= m; i++) {
+    for (j = 1; j <= n; j++) {
+      var cost = a[i-1] === b[j-1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i-1][j] + 1, dp[i][j-1] + 1, dp[i-1][j-1] + cost);
+    }
+  }
+  return dp[m][n];
+}
+function closestMatch(name, list) {
+  var best = null, bestDist = Infinity;
+  for (var i = 0; i < list.length; i++) {
+    var d = levenshtein(name.toLowerCase(), list[i].toLowerCase());
+    if (d < bestDist) { bestDist = d; best = list[i]; }
+  }
+  if (bestDist <= Math.max(2, Math.floor(name.length * 0.34))) return best;
+  return null;
+}
+
+/* ============================================================
+   Hand-rolled JSON tokenizer/parser that tracks source positions
+   for every value AND every object key, so every validation issue
+   can be pinned to an exact line/column range in the editor.
+   ============================================================ */
+function parseJSONWithPositions(text) {
+  var i = 0, line = 1, col = 1, len = text.length;
+  var positions = {}; /* path string -> {sl,sc,el,ec} (1-indexed lines) */
+
+  function err(msg) {
+    var e = new Error(msg);
+    e.line = line; e.col = col;
+    throw e;
+  }
+  function peek() { return text[i]; }
+  function advance() {
+    var c = text[i++];
+    if (c === "\n") { line++; col = 1; } else { col++; }
+    return c;
+  }
+  function here() { return { line: line, col: col }; }
+  function skipWs() {
+    while (i < len) {
+      var c = text[i];
+      if (c === " " || c === "\t" || c === "\n" || c === "\r") { advance(); }
+      else break;
+    }
+  }
+  function pathStr(path) {
+    var s = "";
+    for (var k = 0; k < path.length; k++) {
+      var seg = path[k];
+      if (typeof seg === "number") s += "[" + seg + "]";
+      else s += (s ? "." : "") + seg;
+    }
+    return s || "$root";
+  }
+  function record(path, start, end) {
+    positions[pathStr(path)] = { sl: start.line, sc: start.col, el: end.line, ec: end.col };
+  }
+
+  function parseValue(path) {
+    skipWs();
+    if (i >= len) err("Unexpected end of input");
+    var c = peek();
+    var start = here();
+    var val;
+    if (c === "{") val = parseObject(path);
+    else if (c === "[") val = parseArray(path);
+    else if (c === '"') val = parseString();
+    else if (c === "-" || (c >= "0" && c <= "9")) val = parseNumber();
+    else if (text.substr(i, 4) === "true") { for(var t=0;t<4;t++) advance(); val = true; }
+    else if (text.substr(i, 5) === "false") { for(var f=0;f<5;f++) advance(); val = false; }
+    else if (text.substr(i, 4) === "null") { for(var n=0;n<4;n++) advance(); val = null; }
+    else err("Unexpected token '" + c + "'");
+    var end = here();
+    record(path, start, end);
+    return val;
+  }
+
+  function parseString() {
+    var start = here();
+    advance(); /* opening quote */
+    var s = "";
+    while (i < len && peek() !== '"') {
+      var c = advance();
+      if (c === "\\") {
+        var esc = advance();
+        if (esc === "n") s += "\n";
+        else if (esc === "t") s += "\t";
+        else if (esc === "r") s += "\r";
+        else if (esc === "u") { var hex = text.substr(i, 4); i += 4; col += 4; s += String.fromCharCode(parseInt(hex, 16)); }
+        else s += esc;
+      } else { s += c; }
+    }
+    if (peek() !== '"') err("Unterminated string");
+    advance(); /* closing quote */
+    return s;
+  }
+
+  function parseNumber() {
+    var startI = i;
+    if (peek() === "-") advance();
+    while (i < len && /[0-9]/.test(peek())) advance();
+    if (peek() === ".") { advance(); while (i < len && /[0-9]/.test(peek())) advance(); }
+    if (peek() === "e" || peek() === "E") { advance(); if (peek() === "+" || peek() === "-") advance(); while (i < len && /[0-9]/.test(peek())) advance(); }
+    return parseFloat(text.slice(startI, i));
+  }
+
+  function parseObject(path) {
+    var obj = {};
+    var seenKeys = {};
+    advance(); /* { */
+    skipWs();
+    if (peek() === "}") { advance(); return obj; }
+    while (true) {
+      skipWs();
+      if (peek() !== '"') err("Expected string key");
+      var keyStart = here();
+      var key = parseString();
+      var keyEnd = here();
+      record(path.concat(["__key__" + key]), keyStart, keyEnd);
+      if (seenKeys[key]) {
+        /* duplicate key — non-fatal, recorded via a synthetic path the caller can check */
+        obj.__duplicates__ = obj.__duplicates__ || [];
+        obj.__duplicates__.push(key);
+      }
+      seenKeys[key] = true;
+      skipWs();
+      if (peek() !== ":") err("Expected ':' after key '" + key + "'");
+      advance();
+      skipWs();
+      obj[key] = parseValue(path.concat([key]));
+      skipWs();
+      if (peek() === ",") { advance(); continue; }
+      if (peek() === "}") { advance(); break; }
+      err("Expected ',' or '}' in object");
+    }
+    return obj;
+  }
+
+  function parseArray(path) {
+    var arr = [];
+    advance(); /* [ */
+    skipWs();
+    if (peek() === "]") { advance(); return arr; }
+    var idx = 0;
+    while (true) {
+      skipWs();
+      arr.push(parseValue(path.concat([idx])));
+      idx++;
+      skipWs();
+      if (peek() === ",") { advance(); continue; }
+      if (peek() === "]") { advance(); break; }
+      err("Expected ',' or ']' in array");
+    }
+    return arr;
+  }
+
+  skipWs();
+  var root = parseValue([]);
+  skipWs();
+  if (i < len) err("Unexpected trailing content after JSON value");
+  return { value: root, positions: positions };
+}
+
+/* ============================================================
+   Very small FHIR-XML -> JS object convertor (best-effort).
+   FHIR XML: element name = field name; primitives carry value="";
+   repeated child element names become arrays. Namespaces ignored.
+   Position tracking is not attempted for XML (browser DOMParser
+   does not expose source offsets), so XML issues anchor to line 1.
+   ============================================================ */
+function xmlElementToObject(el) {
+  var obj = {};
+  if (el.hasAttribute && el.hasAttribute("value")) {
+    return el.getAttribute("value");
+  }
+  var children = Array.prototype.filter.call(el.childNodes, function (n) { return n.nodeType === 1; });
+  if (children.length === 0 && el.attributes && el.attributes.length === 0) return "";
+  for (var i = 0; i < children.length; i++) {
+    var child = children[i];
+    var name = child.localName || child.tagName;
+    var val = xmlElementToObject(child);
+    if (Object.prototype.hasOwnProperty.call(obj, name)) {
+      if (!Array.isArray(obj[name])) obj[name] = [obj[name]];
+      obj[name].push(val);
+    } else {
+      obj[name] = val;
+    }
+  }
+  /* carry any plain attributes (other than value/xmlns) as-is */
+  if (el.attributes) {
+    for (var a = 0; a < el.attributes.length; a++) {
+      var attr = el.attributes[a];
+      if (attr.name === "value" || attr.name.indexOf("xmlns") === 0) continue;
+      obj[attr.name] = attr.value;
+    }
+  }
+  return obj;
+}
+
+function parseXML(text) {
+  var parser = new DOMParser();
+  var doc = parser.parseFromString(text, "application/xml");
+  var errNode = doc.getElementsByTagName("parsererror")[0];
+  if (errNode) {
+    var e = new Error("XML is not well-formed: " + errNode.textContent.split("\n")[0]);
+    e.line = 1; e.col = 1;
+    throw e;
+  }
+  var root = doc.documentElement;
+  var obj = xmlElementToObject(root);
+  obj.resourceType = root.localName || root.tagName;
+  return { value: obj, positions: {} };
+}
+
+/* ============================================================
+   Validator — walks the parsed tree against SCHEMAS + generic
+   FHIR structural rules, producing {severity, path, message, fix}
+   ============================================================ */
+function isPlainObject(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
+
+function validateTree(root, positions) {
+  var issues = [];
+
+  function addIssue(sev, path, message, fix) {
+    var key = path.length ? path.join(".").replace(/\.\[/g, "[") : "$root";
+    var displayPath = pathDisplay(path);
+    var pos = positions[displayPath] || positions["$root"] || null;
+    issues.push({
+      severity: sev,
+      path: displayPath,
+      message: message,
+      fix: fix || null,
+      line: pos ? pos.sl : 1,
+      col: pos ? pos.sc : 1,
+      endLine: pos ? pos.el : 1,
+      endCol: pos ? pos.ec : 1
+    });
+  }
+
+  function pathDisplay(path) {
+    var s = "";
+    for (var k = 0; k < path.length; k++) {
+      var seg = path[k];
+      if (typeof seg === "number") s += "[" + seg + "]";
+      else s += (s ? "." : "") + seg;
+    }
+    return s || "$root";
+  }
+
+  if (!isPlainObject(root)) {
+    addIssue("error", [], "Root of the document must be a JSON object representing a single FHIR resource.");
+    return issues;
+  }
+
+  var resourceType = root.resourceType;
+  if (!resourceType) {
+    addIssue("error", ["resourceType"], "Missing required field 'resourceType'. Every FHIR resource must declare its type as the first property.",
+      "Add <b>\"resourceType\": \"Patient\"</b> (or the appropriate type) as the first key of the object.");
+  } else if (typeof resourceType !== "string") {
+    addIssue("error", ["resourceType"], "'resourceType' must be a string.");
+  } else if (RESOURCE_TYPES.indexOf(resourceType) === -1) {
+    var suggestion = closestMatch(resourceType, RESOURCE_TYPES);
+    addIssue("error", ["resourceType"],
+      "'" + resourceType + "' is not a recognized FHIR R4 resource type." + (suggestion ? " Did you mean '" + suggestion + "'?" : ""),
+      suggestion ? "Change <b>resourceType</b> to <b>\"" + suggestion + "\"</b>." : "Check the spelling against the FHIR R4 resource list.");
+  }
+
+  /* -------- generic id / meta checks -------- */
+  if (root.id !== undefined) {
+    if (typeof root.id !== "string" || !PRIMITIVE_REGEX.id.test(root.id)) {
+      addIssue("error", ["id"], "'id' must match ^[A-Za-z0-9\\-.]{1,64}$ (letters, digits, '-', '.', max 64 chars).",
+        "Remove spaces/special characters, or shorten the id to 64 characters or fewer.");
+    }
+  }
+  if (root.meta !== undefined) {
+    if (!isPlainObject(root.meta)) {
+      addIssue("error", ["meta"], "'meta' must be an object.");
+    } else {
+      if (root.meta.lastUpdated !== undefined && typeof root.meta.lastUpdated === "string" && !PRIMITIVE_REGEX.instant.test(root.meta.lastUpdated)) {
+        addIssue("error", ["meta","lastUpdated"], "'meta.lastUpdated' must be a valid FHIR instant, e.g. 2026-02-26T14:30:00Z.",
+          "Use ISO 8601 with time and a timezone offset or 'Z', e.g. <b>2026-02-26T14:30:00Z</b>.");
+      }
+      if (root.meta.profile !== undefined && !Array.isArray(root.meta.profile)) {
+        addIssue("error", ["meta","profile"], "'meta.profile' must be an array of canonical URLs.");
+      }
+    }
+  }
+  if (root.language !== undefined && typeof root.language === "string" && !PRIMITIVE_REGEX.code.test(root.language)) {
+    addIssue("warning", ["language"], "'language' does not look like a valid BCP-47 language code (e.g. 'en', 'en-US').");
+  }
+
+  /* -------- unknown top-level fields (possible typos) -------- */
+  var schema = SCHEMAS[resourceType];
+  var knownFields = KNOWN_ROOT_FIELDS.slice();
+  if (schema) {
+    knownFields = knownFields.concat(schema.arrays || []).concat(schema.scalars || []).concat(schema.required || []).concat(schema.bestPractice || []);
+  }
+  Object.keys(root).forEach(function (key) {
+    if (key === "__duplicates__") return;
+    if (schema && knownFields.indexOf(key) === -1 && !/^_/.test(key)) {
+      addIssue("information", [key],
+        "'" + key + "' is not one of the commonly-used base elements this validator recognizes for " + resourceType + ". This may be a valid extension-carrying field, a choice-type ([x]) variant, or a typo.",
+        "If this isn't a custom/profile-defined field, double-check the spelling against the FHIR R4 " + resourceType + " definition.");
+    }
+  });
+
+  if (root.__duplicates__) {
+    root.__duplicates__.forEach(function (dupKey) {
+      addIssue("warning", [dupKey], "Key '" + dupKey + "' appears more than once in this object. The later value silently overwrites earlier ones.");
+    });
+  }
+
+  /* -------- resource-specific cardinality / required checks -------- */
+  if (schema) {
+    (schema.required || []).forEach(function (field) {
+      if (root[field] === undefined || root[field] === null) {
+        addIssue("error", [field], "'" + field + "' is required on " + resourceType + " (cardinality 1..1 or 1..*) but is missing.",
+          "Add a <b>" + field + "</b> element to this resource.");
+      }
+    });
+    (schema.arrays || []).forEach(function (field) {
+      if (root[field] !== undefined && !Array.isArray(root[field])) {
+        addIssue("error", [field], "'" + field + "' must be an array on " + resourceType + ", but a single value was found.",
+          "Wrap the value in square brackets: <b>\"" + field + "\": [ ... ]</b>.");
+      }
+    });
+    (schema.bestPractice || []).forEach(function (field) {
+      if (root[field] === undefined) {
+        addIssue("best-practice", [field], "HL7 best practice: " + resourceType + " resources should generally include '" + field + "' for the data to be clinically useful, even though the base spec does not strictly require it.");
+      }
+    });
+  } else if (resourceType && RESOURCE_TYPES.indexOf(resourceType) !== -1) {
+    addIssue("information", ["resourceType"], "This validator has a deep rule set for common clinical/admin resources; '" + resourceType + "' is validated only for the generic checks (resourceType, id, meta, references).");
+  }
+
+  /* -------- gender value set -------- */
+  if (root.gender !== undefined && typeof root.gender === "string" && GENDER_VALUES.indexOf(root.gender) === -1) {
+    addIssue("error", ["gender"], "'gender' is bound to AdministrativeGender. " + ADMIN_GENDER_MSG,
+      "Use one of: <b>male</b>, <b>female</b>, <b>other</b>, <b>unknown</b>.");
+  }
+  if (root.birthDate !== undefined && typeof root.birthDate === "string" && !PRIMITIVE_REGEX.date.test(root.birthDate)) {
+    addIssue("error", ["birthDate"], "'birthDate' must be a FHIR date (YYYY, YYYY-MM, or YYYY-MM-DD).",
+      "Use ISO 8601 date format, e.g. <b>1985-03-15</b>.");
+  }
+  if (root.status !== undefined && typeof root.status === "string" && !PRIMITIVE_REGEX.code.test(root.status)) {
+    addIssue("error", ["status"], "'status' does not look like a valid FHIR code (no leading/trailing/internal double spaces).");
+  }
+
+  /* -------- recursive walk for References, HumanName, dateTime-ish keys -------- */
+  function walk(node, path, depthKey) {
+    if (Array.isArray(node)) {
+      node.forEach(function (item, idx) { walk(item, path.concat([idx]), depthKey); });
+      return;
+    }
+    if (!isPlainObject(node)) return;
+
+    if (node.reference !== undefined) {
+      var ref = node.reference;
+      if (typeof ref === "string" && ref.indexOf("#") !== 0 && ref.indexOf("http") !== 0) {
+        var m = /^([A-Za-z]+)\/([A-Za-z0-9\-.]{1,64})$/.exec(ref);
+        if (!m) {
+          addIssue("error", path.concat(["reference"]), "'" + ref + "' does not look like a valid local reference. Expected 'ResourceType/id' (e.g. 'Patient/4829571'), a contained reference ('#id'), or an absolute URL.");
+        } else if (RESOURCE_TYPES.indexOf(m[1]) === -1) {
+          var sugg = closestMatch(m[1], RESOURCE_TYPES);
+          addIssue("warning", path.concat(["reference"]), "'" + m[1] + "' in reference '" + ref + "' is not a recognized resource type." + (sugg ? " Did you mean '" + sugg + "'?" : ""));
+        }
+      }
+    }
+
+    if (node.system !== undefined && node.code !== undefined) {
+      if (typeof node.system === "string" && !/^\S+$/.test(node.system)) {
+        addIssue("error", path.concat(["system"]), "Coding.system must be a URI with no whitespace.");
+      }
+      if (typeof node.code === "string" && !PRIMITIVE_REGEX.code.test(node.code)) {
+        addIssue("error", path.concat(["code"]), "Coding.code does not look like a valid FHIR code.");
+      }
+    }
+
+    if (node.value !== undefined && node.system !== undefined && node.use !== undefined && path[path.length-1] !== "coding") {
+      /* looks like ContactPoint or Identifier - light sanity check only */
+    }
+
+    if (node.start !== undefined && typeof node.start === "string" && !PRIMITIVE_REGEX.dateTime.test(node.start)) {
+      addIssue("error", path.concat(["start"]), "'start' must be a valid FHIR dateTime.");
+    }
+    if (node.end !== undefined && typeof node.end === "string" && !PRIMITIVE_REGEX.dateTime.test(node.end)) {
+      addIssue("error", path.concat(["end"]), "'end' must be a valid FHIR dateTime.");
+    }
+
+    if (node.extension !== undefined) {
+      var exts = Array.isArray(node.extension) ? node.extension : [node.extension];
+      exts.forEach(function (ext, idx) {
+        if (isPlainObject(ext) && !ext.url) {
+          addIssue("error", path.concat(["extension", idx]), "Every extension must have a 'url'.");
+        }
+      });
+    }
+
+    Object.keys(node).forEach(function (key) {
+      if (key === "__duplicates__") return;
+      walk(node[key], path.concat([key]), depthKey);
+    });
+  }
+  walk(root, [], null);
+
+  /* stable order: errors, warnings, best-practice, information; then by line */
+  var order = { error: 0, warning: 1, "best-practice": 2, information: 3 };
+  issues.sort(function (a, b) {
+    if (order[a.severity] !== order[b.severity]) return order[a.severity] - order[b.severity];
+    return a.line - b.line;
+  });
+  return issues;
+}
+
+self.onmessage = function (evt) {
+  var text = evt.data.text;
+  var mode = evt.data.mode;
+  var t0 = performance.now();
+  var result = { issues: [], error: null, resourceType: null, elapsed: 0, mode: mode };
+  try {
+    var parsed;
+    if (mode === "xml") {
+      parsed = parseXML(text);
+    } else {
+      parsed = parseJSONWithPositions(text);
+    }
+    result.issues = validateTree(parsed.value, parsed.positions);
+    result.resourceType = isPlainObject(parsed.value) ? (parsed.value.resourceType || null) : null;
+  } catch (e) {
+    result.error = { message: e.message, line: e.line || 1, col: e.col || 1 };
+  }
+  result.elapsed = Math.round((performance.now() - t0) * 100) / 100;
+  self.postMessage(result);
+};
+</script>
+
+<!-- ============================================================
+     APPLICATION / UI WIRING
+     ============================================================ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- Sample resources ---------------- */
+  var SAMPLES = {
+    "Valid Patient": {
+      resourceType: "Patient",
+      id: "4829571",
+      meta: { versionId: "1", lastUpdated: "2026-02-26T10:15:30.000+00:00" },
+      identifier: [{ system: "urn:healthplus:mrn", value: "MRN-100234" }],
+      name: [{ use: "official", family: "Garcia", given: ["Maria"] }],
+      gender: "female",
+      birthDate: "1985-03-15",
+      telecom: [{ system: "phone", value: "555-0142", use: "home" }],
+      address: [{ use: "home", line: ["742 Evergreen Terrace"], city: "Springfield", state: "IL", postalCode: "62704", country: "US" }]
+    },
+    "Patient with issues": {
+      resourceType: "Patinet",
+      identifier: { system: "urn:healthplus:mrn", value: "MRN-100234" },
+      name: [{ use: "official", family: "Garcia", given: ["Maria"] }],
+      gender: "F",
+      birthDate: "15-03-1985",
+      telecom: [{ system: "phone", value: "555-0142", use: "home" }]
+    },
+    "Valid Observation": {
+      resourceType: "Observation",
+      id: "obs-001",
+      status: "final",
+      code: { coding: [{ system: "http://loinc.org", code: "8310-5", display: "Body temperature" }] },
+      subject: { reference: "Patient/4829571" },
+      effectiveDateTime: "2026-02-26T10:20:00Z",
+      valueQuantity: { value: 37.1, unit: "Cel", system: "http://unitsofmeasure.org", code: "Cel" }
+    },
+    "Observation with issues": {
+      resourceType: "Observation",
+      code: { coding: [{ system: "http://loinc.org", code: "8310 5" }] },
+      subject: { reference: "Patient 4829571" },
+      preformer: [{ reference: "Practitioner/pr-1" }]
+    },
+    "Encounter (minimal)": {
+      resourceType: "Encounter",
+      status: "finished",
+      class: { code: "AMB", system: "http://terminology.hl7.org/CodeSystem/v3-ActCode" },
+      subject: { reference: "Patient/4829571" }
+    },
+    "Bundle (searchset)": {
+      resourceType: "Bundle",
+      type: "searchset",
+      total: 1,
+      entry: [{ resource: { resourceType: "Patient", id: "4829571", name: [{ family: "Garcia", given: ["Maria"] }] } }]
+    }
+  };
+
+  /* ---------------- DOM refs ---------------- */
+  var $ = function (id) { return document.getElementById(id); };
+  var editorHost = $("editor-host");
+  var dropVeil = $("dropVeil");
+  var problemsBody = $("problemsBody");
+  var problemsMeta = $("problemsMeta");
+  var inspectorBody = $("inspectorBody");
+  var editorMeta = $("editorMeta");
+  var chipErr = $("chipErr"), chipWarn = $("chipWarn"), chipMs = $("chipMs");
+  var pulseWrap = $("pulseWrap"), pulsePath = $("pulsePath");
+  var sumResource = $("sumResource"), sumTotal = $("sumTotal"), sumBest = $("sumBest"), sumSize = $("sumSize");
+
+  var currentMode = "json";
+  var lastResult = null;
+  var lastText = "";
+  var markers = [];
+  var activeIssueEl = null;
+
+  /* ---------------- CodeMirror editor ---------------- */
+  var cm = CodeMirror(editorHost, {
+    value: JSON.stringify(SAMPLES["Valid Patient"], null, 2),
+    mode: "application/json",
+    theme: "dracula",
+    lineNumbers: true,
+    gutters: ["CodeMirror-linenumbers", "issue-gutter"],
+    tabSize: 2,
+    indentUnit: 2,
+    lineWrapping: false,
+    matchBrackets: true,
+    autoCloseBrackets: true
+  });
+
+  function updateEditorMeta() {
+    editorMeta.textContent = cm.lineCount() + " lines";
+    sumSize.textContent = formatBytes(new Blob([cm.getValue()]).size);
+  }
+  function formatBytes(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
+  /* ---------------- Worker setup ---------------- */
+  var engineSrc = document.getElementById("engine-src").textContent;
+  var workerBlob = new Blob([engineSrc], { type: "application/javascript" });
+  var worker = new Worker(URL.createObjectURL(workerBlob));
+
+  worker.onmessage = function (evt) {
+    renderResult(evt.data);
+  };
+
+  var debounceTimer = null;
+  function scheduleValidate() {
+    if (!$("autoValidate").checked) return;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(runValidation, 320);
+  }
+
+  function runValidation() {
+    var text = cm.getValue();
+    lastText = text;
+    problemsMeta.textContent = "checking\u2026";
+    worker.postMessage({ text: text, mode: currentMode });
+  }
+
+  cm.on("change", function () {
+    updateEditorMeta();
+    scheduleValidate();
+  });
+  updateEditorMeta();
+
+  /* ---------------- Drag & drop / upload ---------------- */
+  editorHost.addEventListener("dragover", function (e) { e.preventDefault(); dropVeil.classList.add("active"); });
+  editorHost.addEventListener("dragleave", function (e) { dropVeil.classList.remove("active"); });
+  editorHost.addEventListener("drop", function (e) {
+    e.preventDefault();
+    dropVeil.classList.remove("active");
+    var file = e.dataTransfer.files[0];
+    if (file) loadFile(file);
+  });
+  $("uploadBtn").addEventListener("click", function () { $("fileInput").click(); });
+  $("fileInput").addEventListener("change", function (e) {
+    if (e.target.files[0]) loadFile(e.target.files[0]);
+  });
+  function loadFile(file) {
+    var isXml = /\.xml$/i.test(file.name);
+    setMode(isXml ? "xml" : "json");
+    var reader = new FileReader();
+    reader.onload = function () {
+      cm.setValue(reader.result);
+      showToast("Loaded " + file.name);
+      runValidation();
+    };
+    reader.readAsText(file);
+  }
+
+  /* ---------------- Mode tabs (JSON / XML) ---------------- */
+  function setMode(mode) {
+    currentMode = mode;
+    document.querySelectorAll(".editor-tab").forEach(function (t) {
+      t.classList.toggle("active", t.getAttribute("data-mode") === mode);
+    });
+    cm.setOption("mode", mode === "xml" ? "application/xml" : "application/json");
+  }
+  document.querySelectorAll(".editor-tab").forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      setMode(tab.getAttribute("data-mode"));
+      runValidation();
+    });
+  });
+
+  /* ---------------- Sample dropdown ---------------- */
+  var sampleMenu = $("sampleMenu");
+  Object.keys(SAMPLES).forEach(function (name) {
+    var item = document.createElement("div");
+    item.className = "dropdown-item";
+    item.innerHTML = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M9 12l2 2 4-4'/><circle cx='12' cy='12' r='10'/></svg><span>" + name + "</span>";
+    item.addEventListener("click", function () {
+      setMode("json");
+      cm.setValue(JSON.stringify(SAMPLES[name], null, 2));
+      closeDropdowns();
+      runValidation();
+    });
+    sampleMenu.appendChild(item);
+  });
+  wireDropdown("sampleDropdown", "sampleBtn");
+  wireDropdown("exportDropdown", "exportBtn");
+  function wireDropdown(dropId, btnId) {
+    var drop = $(dropId);
+    $(btnId).addEventListener("click", function (e) {
+      e.stopPropagation();
+      var willOpen = !drop.classList.contains("open");
+      closeDropdowns();
+      if (willOpen) drop.classList.add("open");
+    });
+  }
+  function closeDropdowns() {
+    document.querySelectorAll(".dropdown").forEach(function (d) { d.classList.remove("open"); });
+  }
+  document.addEventListener("click", closeDropdowns);
+
+  /* ---------------- Buttons ---------------- */
+  $("validateBtn").addEventListener("click", runValidation);
+  $("clearBtn").addEventListener("click", function () {
+    cm.setValue("");
+    lastResult = null;
+    renderEmptyProblems();
+    resetStats();
+    showToast("Cleared");
+  });
+
+  /* ---------------- Rendering ---------------- */
+  var SEV_ORDER = ["error", "warning", "best-practice", "information"];
+  var SEV_LABEL = { error: "Errors", warning: "Warnings", "best-practice": "Best practice", information: "Information" };
+
+  function renderEmptyProblems() {
+    problemsBody.innerHTML =
+      '<div class="empty-state">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>' +
+      "<div>Paste or load a resource, then run<br/>a validation pass to see results here.</div></div>";
+    problemsMeta.textContent = "not yet checked";
+    inspectorBody.innerHTML = '<div class="inspector-empty">Click any problem on the left to see exactly where it lives in the source, why it\u2019s flagged, and how to fix it \u2014 without leaving this window.</div>';
+  }
+
+  function resetStats() {
+    chipErr.textContent = "0"; chipWarn.textContent = "0"; chipMs.textContent = "\u2014";
+    sumResource.textContent = "\u2014"; sumTotal.textContent = "0"; sumBest.textContent = "0";
+    setPulse(0, 0);
+  }
+
+  function clearMarkers() {
+    markers.forEach(function (m) { m.clear && m.clear(); });
+    markers = [];
+    cm.clearGutter("issue-gutter");
+    for (var l = 0; l < cm.lineCount(); l++) {
+      cm.removeLineClass(l, "background", "line-err");
+      cm.removeLineClass(l, "background", "line-warn");
+      cm.removeLineClass(l, "background", "line-info");
+      cm.removeLineClass(l, "background", "line-practice");
+    }
+  }
+
+  function lineClassFor(sev) {
+    return sev === "error" ? "line-err" : sev === "warning" ? "line-warn" : sev === "best-practice" ? "line-practice" : "line-info";
+  }
+
+  function renderResult(data) {
+    lastResult = data;
+
+    if (data.error) {
+      clearMarkers();
+      problemsBody.innerHTML =
+        '<div class="empty-state" style="color:var(--error-red)">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>' +
+        "<div><b>Syntax error</b><br/>" + escapeHtml(data.error.message) + "<br/><span style='font-family:var(--font-mono);font-size:11px'>line " + data.error.line + ", col " + data.error.col + "</span></div></div>";
+      problemsMeta.textContent = "parse failed";
+      var ln = Math.max(0, data.error.line - 1);
+      cm.addLineClass(ln, "background", "line-err");
+      markers.push({ clear: function () { cm.removeLineClass(ln, "background", "line-err"); } });
+      cm.scrollIntoView({ line: ln, ch: 0 }, 100);
+      chipErr.textContent = "1"; chipWarn.textContent = "0"; chipMs.textContent = data.elapsed;
+      sumResource.textContent = "\u2014"; sumTotal.textContent = "1"; sumBest.textContent = "0";
+      setPulse(1, 0);
+      return;
+    }
+
+    var issues = data.issues;
+    var counts = { error: 0, warning: 0, "best-practice": 0, information: 0 };
+    issues.forEach(function (iss) { counts[iss.severity]++; });
+
+    chipErr.textContent = counts.error;
+    chipWarn.textContent = counts.warning;
+    chipMs.textContent = data.elapsed;
+    sumResource.textContent = data.resourceType || "Unknown";
+    sumTotal.textContent = issues.length;
+    sumBest.textContent = counts["best-practice"];
+    problemsMeta.textContent = issues.length === 0 ? "0 issues \u00b7 " + data.elapsed + "ms" : issues.length + " issue" + (issues.length === 1 ? "" : "s") + " \u00b7 " + data.elapsed + "ms";
+    setPulse(counts.error, counts.warning);
+
+    clearMarkers();
+
+    if (issues.length === 0) {
+      problemsBody.innerHTML =
+        '<div class="empty-state" style="color:var(--pulse-cyan)">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>' +
+        "<div><b>No issues found</b><br/>This resource passed every structural, cardinality, and format check this validator runs.</div></div>";
+      inspectorBody.innerHTML = '<div class="inspector-empty">Nothing to inspect \u2014 the resource is clean.</div>';
+      return;
+    }
+
+    var groups = {};
+    SEV_ORDER.forEach(function (s) { groups[s] = []; });
+    issues.forEach(function (iss, idx) { iss.__idx = idx; groups[iss.severity].push(iss); });
+
+    var html = "";
+    SEV_ORDER.forEach(function (sev) {
+      if (groups[sev].length === 0) return;
+      html += '<details class="severity-group" open>' +
+        "<summary><span class='sev-dot " + sev + "'></span>" + SEV_LABEL[sev] + " <span class='sev-count'>(" + groups[sev].length + ")</span><span class='caret'>\u203a</span></summary>";
+      groups[sev].forEach(function (iss) {
+        html += "<div class='issue-row' data-idx='" + iss.__idx + "'>" +
+          "<span class='path'>" + escapeHtml(iss.path) + "<span class='line-tag'>L" + iss.line + "</span></span>" +
+          "<span class='msg'>" + escapeHtml(iss.message) + "</span></div>";
+      });
+      html += "</details>";
+    });
+    problemsBody.innerHTML = html;
+
+    /* wire click handlers */
+    problemsBody.querySelectorAll(".issue-row").forEach(function (row) {
+      row.addEventListener("click", function () {
+        var idx = parseInt(row.getAttribute("data-idx"), 10);
+        selectIssue(issues[idx], row);
+      });
+    });
+
+    /* gutter + line markers for every issue */
+    issues.forEach(function (iss) {
+      var lineIdx = Math.max(0, iss.line - 1);
+      cm.addLineClass(lineIdx, "background", lineClassFor(iss.severity));
+      var marker = document.createElement("div");
+      marker.className = "gutter-marker " + iss.severity;
+      marker.title = iss.message;
+      cm.setGutterMarker(lineIdx, "issue-gutter", marker);
+      markers.push({ clear: function () {} }); /* cleared in bulk via clearMarkers */
+    });
+
+    /* auto-select first (highest-severity) issue */
+    var firstRow = problemsBody.querySelector(".issue-row");
+    if (firstRow) selectIssue(issues[parseInt(firstRow.getAttribute("data-idx"), 10)], firstRow);
+  }
+
+  function selectIssue(issue, rowEl) {
+    if (activeIssueEl) activeIssueEl.classList.remove("active");
+    if (rowEl) { rowEl.classList.add("active"); activeIssueEl = rowEl; }
+
+    var fromLine = Math.max(0, issue.line - 1);
+    var toLine = Math.max(0, issue.endLine - 1);
+    cm.scrollIntoView({ line: fromLine, ch: 0 }, 140);
+    var flashMark = cm.markText(
+      { line: fromLine, ch: 0 },
+      { line: toLine, ch: cm.getLine(toLine) ? cm.getLine(toLine).length : 0 },
+      { className: "mark-flash" }
+    );
+    setTimeout(function () { flashMark.clear(); }, 900);
+
+    /* Inspector = separate window pane with contextual snippet */
+    var lines = lastText.split("\n");
+    var ctxStart = Math.max(0, fromLine - 2);
+    var ctxEnd = Math.min(lines.length - 1, toLine + 2);
+    var snippetHtml = "";
+    for (var l = ctxStart; l <= ctxEnd; l++) {
+      var isHl = l >= fromLine && l <= toLine;
+      snippetHtml += "<div class='sl" + (isHl ? " hl" : "") + "'><span class='ln'>" + (l + 1) + "</span><span class='code'>" + escapeHtml(lines[l] || "") + "</span></div>";
+    }
+
+    inspectorBody.innerHTML =
+      "<span class='insp-badge " + issue.severity + "'>" + SEV_LABEL[issue.severity] + "</span>" +
+      "<div class='insp-path'>" + escapeHtml(issue.path) + "</div>" +
+      "<div class='insp-msg'>" + escapeHtml(issue.message) + "</div>" +
+      (issue.fix ? "<div class='insp-fix'>\uD83D\uDCA1 " + issue.fix + "</div>" : "") +
+      "<div class='insp-snippet'>" + snippetHtml + "</div>";
+  }
+
+  /* ---------------- Signature pulse line ---------------- */
+  function setPulse(errCount, warnCount) {
+    pulseWrap.classList.toggle("has-errors", errCount > 0);
+    pulseWrap.classList.toggle("has-warnings", errCount === 0 && warnCount > 0);
+    var w = 440, h = 46, mid = h / 2;
+    var spikes = Math.min(errCount + Math.ceil(warnCount / 2), 8);
+    var d = "M0," + mid;
+    if (spikes === 0) {
+      d += " L" + w + "," + mid;
+    } else {
+      var seg = w / (spikes * 2 + 1);
+      var x = seg;
+      for (var s = 0; s < spikes; s++) {
+        var amp = 15 + (s % 3) * 4;
+        d += " L" + x + "," + mid + " L" + (x + seg * 0.28) + "," + (mid - amp) + " L" + (x + seg * 0.56) + "," + (mid + amp * 0.6) + " L" + (x + seg * 0.85) + "," + mid;
+        x += seg * 2;
+      }
+      d += " L" + w + "," + mid;
+    }
+    pulsePath.setAttribute("d", d);
+  }
+
+  /* ---------------- Toast ---------------- */
+  function showToast(text) {
+    var host = $("toast-host");
+    var el = document.createElement("div");
+    el.className = "toast success";
+    el.innerHTML = "<span class='dot'></span>" + escapeHtml(text);
+    host.appendChild(el);
+    setTimeout(function () { el.remove(); }, 3200);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+    });
+  }
+
+  /* ---------------- Export ---------------- */
+  function download(filename, content, mime) {
+    var blob = new Blob([content], { type: mime });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 500);
+  }
+
+  function buildReportData() {
+    var issues = (lastResult && lastResult.issues) || [];
+    return {
+      generatedAt: new Date().toISOString(),
+      resourceType: (lastResult && lastResult.resourceType) || null,
+      elapsedMs: (lastResult && lastResult.elapsed) || null,
+      totalIssues: issues.length,
+      counts: issues.reduce(function (acc, i) { acc[i.severity] = (acc[i.severity] || 0) + 1; return acc; }, {}),
+      issues: issues.map(function (i) {
+        return { severity: i.severity, path: i.path, message: i.message, line: i.line, column: i.col };
+      }),
+      sourceExcerptBytes: new Blob([lastText]).size
+    };
+  }
+
+  document.querySelectorAll("[data-export]").forEach(function (item) {
+    item.addEventListener("click", function () {
+      closeDropdowns();
+      if (!lastResult) { showToast("Run a validation pass first"); return; }
+      var kind = item.getAttribute("data-export");
+      var report = buildReportData();
+      var stamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+      if (kind === "json") {
+        download("fhir-validator-report-" + stamp + ".json", JSON.stringify(report, null, 2), "application/json");
+        showToast("JSON report downloaded");
+      } else if (kind === "csv") {
+        var rows = [["Severity", "Path", "Message", "Line", "Column"]];
+        report.issues.forEach(function (i) { rows.push([i.severity, i.path, i.message, i.line, i.column]); });
+        var csv = rows.map(function (r) {
+          return r.map(function (cell) {
+            var s = String(cell).replace(/"/g, '""');
+            return /[",\n]/.test(s) ? '"' + s + '"' : s;
+          }).join(",");
+        }).join("\n");
+        download("fhir-validator-report-" + stamp + ".csv", csv, "text/csv");
+        showToast("CSV report downloaded");
+      } else if (kind === "html") {
+        download("fhir-validator-report-" + stamp + ".html", buildHtmlReport(report), "text/html");
+        showToast("HTML report downloaded");
+      } else if (kind === "print") {
+        var w = window.open("", "_blank");
+        w.document.write(buildHtmlReport(report));
+        w.document.close();
+        setTimeout(function () { w.print(); }, 400);
+      }
+    });
+  });
+
+  function buildHtmlReport(report) {
+    var sevColor = { error: "#D9342B", warning: "#B5720A", "best-practice": "#6B3FC9", information: "#1D5FBF" };
+    var rows = report.issues.map(function (i) {
+      return "<tr><td style='color:" + (sevColor[i.severity] || "#333") + ";font-weight:600;text-transform:capitalize'>" + i.severity.replace("-", " ") + "</td>" +
+        "<td style='font-family:monospace'>" + escapeHtml(i.path) + "</td>" +
+        "<td>" + escapeHtml(i.message) + "</td>" +
+        "<td style='font-family:monospace'>" + i.line + "</td></tr>";
+    }).join("");
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><title>FHIR R4 Validator powered by Dharma &mdash; validation report</title>" +
+      "<style>body{font-family:-apple-system,Segoe UI,sans-serif;max-width:900px;margin:40px auto;color:#1a1a1a;padding:0 20px}" +
+      "h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border-bottom:1px solid #e2e2e2;padding:8px 10px;text-align:left;font-size:13px;vertical-align:top}" +
+      "th{background:#f4f4f4;text-transform:uppercase;font-size:11px;letter-spacing:0.04em}" +
+      ".meta{color:#666;font-size:13px;margin:4px 0}.badge{display:inline-block;padding:3px 10px;border-radius:20px;background:#eee;font-size:12px;margin-right:8px}</style></head><body>" +
+      "<h1>FHIR R4 Validator powered by Dharma \u2014 validation report</h1>" +
+      "<p class='meta'>Generated " + report.generatedAt + "</p>" +
+      "<p class='meta'>Resource type: <b>" + (report.resourceType || "Unknown") + "</b> &middot; Processed in " + report.elapsedMs + "ms &middot; Source size " + report.sourceExcerptBytes + " bytes</p>" +
+      "<p>" + Object.keys(report.counts).map(function (k) { return "<span class='badge'>" + k + ": " + report.counts[k] + "</span>"; }).join("") + "</p>" +
+      "<table><thead><tr><th>Severity</th><th>Path</th><th>Message</th><th>Line</th></tr></thead><tbody>" + (rows || "<tr><td colspan='4'>No issues found.</td></tr>") + "</tbody></table>" +
+      "<p style='margin-top:24px;color:#999;font-size:11px'>Generated client-side by FHIR R4 Validator powered by Dharma. Informational only \u2014 not a substitute for the HL7 reference validator or implementation-guide-specific profile validation.</p>" +
+      "<p style='color:#999;font-size:11px'>&copy; Copyright 2026 Dharmaraj Nagarajan. All rights reserved.</p>" +
+      "</body></html>";
+  }
+
+  /* ---------------- init ---------------- */
+  resetStats();
+  runValidation();
+})();
+</script>
+
+</body>
+</html>
